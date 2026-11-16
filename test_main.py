@@ -116,5 +116,14 @@ def test_streak_ignores_malformed_days():
     assert compute_streak(days, date(2026, 3, 15)) == 2
 
 
+def test_streak_non_padded_day_is_skipped_and_logged(caplog):
+    # Review finding: the agent claimed "2026-3-14" would count as the same day
+    # as "2026-03-14". date.fromisoformat rejects it, so the streak breaks there.
+    days = ["2026-03-15", "2026-3-14", "2026-03-13"]
+    with caplog.at_level("WARNING", logger="main"):
+        assert compute_streak(days, date(2026, 3, 15)) == 1
+    assert "'2026-3-14'" in caplog.text
+
+
 def test_get_today_defaults_to_real_date():
     assert get_today() == date.today()

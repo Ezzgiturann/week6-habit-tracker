@@ -10,6 +10,7 @@ Test:
     pytest
 """
 
+import logging
 import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
@@ -20,6 +21,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent / "habits.db"
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Habit Tracker")
 
@@ -110,7 +113,10 @@ def compute_streak(days: Iterable[str], today: date) -> int:
 
     - Duplicate check-ins on the same day count once.
     - Future-dated check-ins are ignored.
-    - Unparseable day strings are ignored (input isn't validated yet).
+    - Rows that are not strict ISO dates (YYYY-MM-DD) are skipped and logged.
+      Non-padded values such as "2026-3-1" are NOT parsed by
+      date.fromisoformat, so they do not count. Check-in input is not
+      validated yet, so such rows can exist in the database.
     - If neither today nor yesterday has a check-in, the streak is 0.
     """
     checked: set[date] = set()
@@ -118,6 +124,7 @@ def compute_streak(days: Iterable[str], today: date) -> int:
         try:
             d = date.fromisoformat(raw)
         except (TypeError, ValueError):
+            logger.warning("streak: skipping check-in with invalid day %r", raw)
             continue
         if d <= today:
             checked.add(d)
