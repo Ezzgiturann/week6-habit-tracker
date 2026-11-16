@@ -3,9 +3,21 @@ from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+import main
 from main import app, compute_streak, get_today
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_db(tmp_path, monkeypatch):
+    """Give every test its own empty database.
+
+    Review finding: the tests wrote into the real habits.db and never cleaned
+    up, so each pytest run added 12 habits that then showed up in GET /habits.
+    """
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.db")
+    main.init_db()
 
 
 def test_create_and_list_habit():
