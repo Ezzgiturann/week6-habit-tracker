@@ -11,10 +11,12 @@ Test:
 """
 
 import sqlite3
+from collections.abc import Iterable
 from contextlib import closing
+from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent / "habits.db"
@@ -96,3 +98,55 @@ def list_checkins(habit_id: int):
             "SELECT day FROM checkins WHERE habit_id = ? ORDER BY day", (habit_id,)
         ).fetchall()
     return [r["day"] for r in rows]
+
+
+def get_today() -> date:
+    """Current date as a dependency, so tests can override it."""
+    return date.today()
+
+
+def compute_streak(days: Iterable[str], today: date) -> int:
+    """Count consecutive checked-in days ending today (or yesterday).
+
+    - Duplicate check-ins on the same day count once.
+    - Future-dated check-ins are ignored.
+    - Unparseable day strings are ignored (input isn't validated yet).
+    - If neither today nor yesterday has a check-in, the streak is 0.
+    """
+    checked: set[date] = set()
+    for raw in days:
+        try:
+            d = date.fromisoformat(raw)
+        except (TypeError, ValueError):
+            continue
+        if d <= today:
+            checked.add(d)
+
+    yesterday = today - timedelta(days=1)
+    if today in checked:
+        cursor = today
+    elif yesterday in checked:
+        cursor = yesterday
+    else:
+        return 0
+
+    streak = 0
+    while cursor in checked:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+@app.get("/habits/{habit_id}/streak")
+def get_streak(habit_id: int, today: date = Depends(get_today)):
+    with closing(get_db()) as conn:
+        habit = conn.execute(
+            "SELECT id FROM habits WHERE id = ?", (habit_id,)
+        ).fetchone()
+        if habit is None:
+            raise HTTPException(status_code=404, detail="unknown habit")
+        rows = conn.execute(
+            "SELECT day FROM checkins WHERE habit_id = ?", (habit_id,)
+        ).fetchall()
+    days = [r["day"] for r in rows]
+    return {"habit_id": habit_id, "streak": compute_streak(days, today)}
