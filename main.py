@@ -11,11 +11,13 @@ Test:
 """
 
 import logging
+import re
 import sqlite3
 from collections.abc import Iterable
 from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
@@ -23,6 +25,9 @@ from pydantic import BaseModel
 DB_PATH = Path(__file__).parent / "habits.db"
 
 logger = logging.getLogger(__name__)
+
+# Strict YYYY-MM-DD with ASCII digits only (\d would also match e.g. Arabic-Indic).
+DAY_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 app = FastAPI(title="Habit Tracker")
 
@@ -108,22 +113,35 @@ def get_today() -> date:
     return date.today()
 
 
+def _parse_day(raw: object) -> Optional[date]:
+    """Parse a strict YYYY-MM-DD string, or return None.
+
+    The regex runs first because date.fromisoformat accepts more than
+    YYYY-MM-DD on Python 3.11+ ("20260314", "2026-W11-5"), so the result would
+    depend on the Python version (local 3.9 rejects them, CI 3.12 accepts).
+    """
+    if not isinstance(raw, str) or not DAY_PATTERN.fullmatch(raw):
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:  # right shape, impossible date such as 2026-02-30
+        return None
+
+
 def compute_streak(days: Iterable[str], today: date) -> int:
     """Count consecutive checked-in days ending today (or yesterday).
 
     - Duplicate check-ins on the same day count once.
     - Future-dated check-ins are ignored.
-    - Rows that are not strict ISO dates (YYYY-MM-DD) are skipped and logged.
-      Non-padded values such as "2026-3-1" are NOT parsed by
-      date.fromisoformat, so they do not count. Check-in input is not
+    - Rows that are not strict ISO dates (YYYY-MM-DD) are skipped and logged,
+      e.g. "2026-3-1", "20260314" or "2026-W11-5". Check-in input is not
       validated yet, so such rows can exist in the database.
     - If neither today nor yesterday has a check-in, the streak is 0.
     """
     checked: set[date] = set()
     for raw in days:
-        try:
-            d = date.fromisoformat(raw)
-        except (TypeError, ValueError):
+        d = _parse_day(raw)
+        if d is None:
             logger.warning("streak: skipping check-in with invalid day %r", raw)
             continue
         if d <= today:

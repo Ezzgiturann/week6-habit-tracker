@@ -137,5 +137,15 @@ def test_streak_non_padded_day_is_skipped_and_logged(caplog):
     assert "'2026-3-14'" in caplog.text
 
 
+@pytest.mark.parametrize("raw", ["20260314", "2026-W11-6", "2026-02-30", "٢٠٢٦-٠٣-١٤"])
+def test_streak_skips_non_strict_iso_forms(raw, caplog):
+    # CodeRabbit finding: on Python 3.11+ date.fromisoformat accepts "20260314"
+    # and week dates, so they counted on CI (3.12) but not locally (3.9).
+    days = ["2026-03-15", raw, "2026-03-13"]
+    with caplog.at_level("WARNING", logger="main"):
+        assert compute_streak(days, date(2026, 3, 15)) == 1
+    assert repr(raw) in caplog.text
+
+
 def test_get_today_defaults_to_real_date():
     assert get_today() == date.today()
