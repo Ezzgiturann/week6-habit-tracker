@@ -10,12 +10,14 @@ Test:
     pytest
 """
 
+import re
 import sqlite3
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, field_validator
 
 DB_PATH = Path(__file__).parent / "habits.db"
 
@@ -50,12 +52,48 @@ def init_db() -> None:
 init_db()
 
 
+MAX_HABIT_NAME_LENGTH = 100
+
+# Strict YYYY-MM-DD. Checked before date.fromisoformat() because on Python 3.11+
+# fromisoformat also accepts forms like "20260301" or "2026-W09-7". [0-9] rather
+# than \d, which would also match non-ASCII digits.
+DAY_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def get_today() -> date:
+    """Today's date, as a dependency so tests can override it."""
+    return date.today()
+
+
 class HabitIn(BaseModel):
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("habit name must not be empty")
+        if len(value) > MAX_HABIT_NAME_LENGTH:
+            raise ValueError(
+                f"habit name must be at most {MAX_HABIT_NAME_LENGTH} characters"
+            )
+        return value
 
 
 class CheckinIn(BaseModel):
     day: str  # ISO date, e.g. "2026-09-22"
+
+    @field_validator("day")
+    @classmethod
+    def check_day(cls, value: str) -> str:
+        if not DAY_PATTERN.fullmatch(value):
+            raise ValueError("day must be in YYYY-MM-DD format, e.g. 2026-09-22")
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError(f"day {value!r} is not a real calendar date") from None
+        return value
 
 
 @app.post("/habits")
@@ -74,7 +112,12 @@ def list_habits():
 
 
 @app.post("/habits/{habit_id}/checkin")
-def add_checkin(habit_id: int, checkin: CheckinIn):
+def add_checkin(habit_id: int, checkin: CheckinIn, today: date = Depends(get_today)):
+    if date.fromisoformat(checkin.day) > today:
+        raise HTTPException(
+            status_code=422,
+            detail=f"day {checkin.day} is in the future (today is {today})",
+        )
     with closing(get_db()) as conn:
         habit = conn.execute(
             "SELECT id FROM habits WHERE id = ?", (habit_id,)
