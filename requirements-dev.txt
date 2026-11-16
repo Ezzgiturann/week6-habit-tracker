@@ -1,3 +1,5 @@
 -r requirements.txt
-black
-ruff
+# Pinned so local runs and CI format identically (an unpinned CI install pulled
+# black 26.x, whose style differs from the 25.x installed locally).
+black==25.11.0
+ruff==0.17.5

@@ -32,6 +32,10 @@ Config lives in `pyproject.toml`.
   fixed both.
 - Adding a deliberately failing test (`assert 1 + 1 == 3`) made `./check.sh` exit with
   code 1 (`1 failed, 3 passed`). Removing it brought the exit code back to 0.
+- CI first failed on `black --check` even though it passed locally: CI had installed
+  black 26.10.1 and my machine had 25.11.0, and the two format code differently. Tool
+  versions are now pinned in `requirements-dev.txt` so a check gives the same result
+  everywhere.
 
 ## Endpoints
 - `POST /habits` `{ "name": ... }`
