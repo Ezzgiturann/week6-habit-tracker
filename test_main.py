@@ -3,9 +3,22 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+import main
 from main import MAX_HABIT_NAME_LENGTH, app, get_today
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_db(tmp_path, monkeypatch):
+    """Give every test its own empty database.
+
+    CodeRabbit finding (Major): the tests wrote into the real habits.db, so
+    each pytest run left habits and check-ins behind (0 -> 28 habits).
+    """
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.db")
+    main.init_db()
+
 
 # Pinned "today" so no test depends on the real clock.
 FIXED_TODAY = date(2026, 9, 30)
