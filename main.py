@@ -12,6 +12,7 @@ Test:
 
 import re
 import sqlite3
+import unicodedata
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -65,6 +66,12 @@ def get_today() -> date:
     return date.today()
 
 
+def _is_visible(ch: str) -> bool:
+    """False for whitespace (Z*), control (Cc) and format (Cf) characters."""
+    category = unicodedata.category(ch)
+    return not (category.startswith("Z") or category in ("Cc", "Cf"))
+
+
 class HabitIn(BaseModel):
     name: str
 
@@ -72,7 +79,9 @@ class HabitIn(BaseModel):
     @classmethod
     def clean_name(cls, value: str) -> str:
         value = value.strip()
-        if not value:
+        # strip() keeps format/control characters such as U+200B (zero-width
+        # space), so a name made only of those would look empty in a UI.
+        if not any(_is_visible(ch) for ch in value):
             raise ValueError("habit name must not be empty")
         if len(value) > MAX_HABIT_NAME_LENGTH:
             raise ValueError(

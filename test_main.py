@@ -76,6 +76,27 @@ def test_empty_or_blank_habit_name_rejected(name):
     assert habit_count() == before
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["​", " ​​ ", "⁠", "﻿", "‍‌", " 　"],
+)
+def test_invisible_only_habit_name_rejected(name):
+    # Review finding: "​" (zero-width space) passed strip() and was stored
+    # as a habit that looks empty.
+    before = habit_count()
+    r = client.post("/habits", json={"name": name})
+    assert r.status_code == 422
+    assert "must not be empty" in error_text(r)
+    assert habit_count() == before
+
+
+@pytest.mark.parametrize("name", ["Koşu", "👍", "🏃‍♀️", "読書", "a​b"])
+def test_names_with_visible_characters_accepted(name):
+    r = client.post("/habits", json={"name": name})
+    assert r.status_code == 200
+    assert r.json()["name"] == name
+
+
 def test_habit_name_at_max_length_accepted():
     name = "a" * MAX_HABIT_NAME_LENGTH
     r = client.post("/habits", json={"name": name})
