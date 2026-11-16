@@ -1,0 +1,20 @@
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+extend-exclude = "\\.venv"
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes (unused imports, undefined names),
+# I: import order, B: bugbear (likely bugs), UP: outdated syntax
+select = ["E", "W", "F", "I", "B", "UP"]
+# FastAPI's dependency pattern triggers B008 by design.
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = "-q"

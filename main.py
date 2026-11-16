@@ -9,6 +9,7 @@ Run:
 Test:
     pytest
 """
+
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -75,11 +76,14 @@ def list_habits():
 @app.post("/habits/{habit_id}/checkin")
 def add_checkin(habit_id: int, checkin: CheckinIn):
     with closing(get_db()) as conn:
-        habit = conn.execute("SELECT id FROM habits WHERE id = ?", (habit_id,)).fetchone()
+        habit = conn.execute(
+            "SELECT id FROM habits WHERE id = ?", (habit_id,)
+        ).fetchone()
         if habit is None:
             raise HTTPException(status_code=404, detail="unknown habit")
         conn.execute(
-            "INSERT INTO checkins (habit_id, day) VALUES (?, ?)", (habit_id, checkin.day)
+            "INSERT INTO checkins (habit_id, day) VALUES (?, ?)",
+            (habit_id, checkin.day),
         )
         conn.commit()
     return {"habit_id": habit_id, "day": checkin.day}
